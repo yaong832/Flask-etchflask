@@ -17,12 +17,12 @@
 
 | 용도 | 저장소 | 로컬 경로 |
 |------|--------|-----------|
-| **식각 Flask** (이 프로젝트) | [yaong832/etchflask](https://github.com/yaong832/etchflask) | `C:\etchflask` |
-| **농장 Flask** (스마트팜) | [yaong832/SmartFarmFlask](https://github.com/yaong832/SmartFarmFlask) | `C:\farmui\farmui` |
+| **식각 Flask** (이 프로젝트) | [yaong832/Flask-etchflask](https://github.com/yaong832/Flask-etchflask) | `C:\etchflask` |
+| **농장 Flask** (스마트팜) | [yaong832/Flask-SmartFarmFlask](https://github.com/yaong832/Flask-SmartFarmFlask) | `C:\farmui\farmui` |
 
 ```bash
 # etchflask remote
-git remote set-url origin https://github.com/yaong832/etchflask.git
+git remote set-url origin https://github.com/yaong832/Flask-etchflask.git
 ```
 
 구 `farmui` 저장소에 섞여 있던 FarmUI 이력은 `SmartFarmFlask`로 분리합니다.
