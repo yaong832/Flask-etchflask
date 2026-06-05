@@ -13,16 +13,19 @@
 - Farm 전용 `ai_analysis.py` / `ml_trainer.py` (삭제됨)
 - `run_farmui.bat` (삭제됨 — FarmUI는 `C:\farmui`에서 실행)
 
-## GitHub 저장소 이름
+## GitHub 저장소 (용도별 분리)
 
-현재 remote가 `yaong832/farmui`로 남아 있을 수 있습니다. **내용은 Etch 전용**이므로 GitHub에서 저장소 이름을 `etchflask`로 바꾸는 것을 권장합니다.
+| 용도 | 저장소 | 로컬 경로 |
+|------|--------|-----------|
+| **식각 Flask** (이 프로젝트) | [yaong832/etchflask](https://github.com/yaong832/etchflask) | `C:\etchflask` |
+| **농장 Flask** (스마트팜) | [yaong832/SmartFarmFlask](https://github.com/yaong832/SmartFarmFlask) | `C:\farmui\farmui` |
 
 ```bash
-# GitHub 웹: Settings → Repository name → etchflask
+# etchflask remote
 git remote set-url origin https://github.com/yaong832/etchflask.git
 ```
 
-FarmUI 레거시 이력은 Git 태그/브랜치 `legacy/farm` (커밋 `800ce19` 이전)에서 확인할 수 있습니다.
+구 `farmui` 저장소에 섞여 있던 FarmUI 이력은 `SmartFarmFlask`로 분리합니다.
 
 ## WPF 연동
 
