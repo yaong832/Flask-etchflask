@@ -18,6 +18,7 @@ C:\etchflask\run_flask.bat
 
 | 문서 | 경로 |
 |------|------|
+| **초보자 가이드 (탭·AI·demo/live)** | [**사용자_가이드.md**](사용자_가이드.md) |
 | **구현 상태 체크리스트** | `d:\wpf과제프로젝트\구현_상태_체크리스트.md` |
 | **원격 모니터링 (2대 PC)** | [REMOTE_MONITORING.md](REMOTE_MONITORING.md) |
 | **WPF 실행 순서** | `D:\WPFProject\etch_ui\PROTO_실행순서.md` |
