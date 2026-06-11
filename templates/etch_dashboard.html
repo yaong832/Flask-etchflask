@@ -502,14 +502,16 @@
         <div class="wrap">
         <div class="kpi-row" style="margin-bottom:0;">
             <div class="kpi"><div class="lbl">이상 점수</div><div class="num" id="aiScoreNum">-</div></div>
-            <div class="kpi"><div class="lbl">모델</div><div class="num" id="aiModelReady" style="font-size:0.95rem">-</div></div>
+            <div class="kpi"><div class="lbl">AI 엔진</div><div class="num" id="aiModelReady" style="font-size:0.95rem">-</div></div>
             <div class="kpi"><div class="lbl">갱신</div><div class="num" id="aiUpdatedAt" style="font-size:0.85rem">-</div></div>
         </div>
         <div class="ai-layout">
             <div class="ai-box">
-                <h2>권고 (조회 전용)</h2>
+                <h2>AI 조언 (조회 전용 · WPF와 동일)</h2>
+                <p id="aiEngineNote" style="font-size:0.8rem;color:#64748b;margin:0 0 8px;">인터락·Start 자동 변경 없음</p>
                 <p id="aiPredicted" style="font-size:0.9rem;font-weight:600;color:#7c2d12;margin-bottom:8px;">예상 알람: -</p>
-                <p id="aiSuggested" style="font-size:0.9rem;line-height:1.45;color:#111827;flex:1;overflow-y:auto;">-</p>
+                <p id="aiSuggested" style="font-size:0.9rem;line-height:1.45;color:#111827;margin-bottom:8px;">-</p>
+                <div id="aiTopSignals" style="font-size:0.8rem;line-height:1.4;color:#374151;flex:1;overflow-y:auto;"></div>
             </div>
             <div class="ai-box">
                 <h2>모델 상태</h2>
@@ -530,6 +532,33 @@
         const MAX_POINTS = 80;
         const MAX_LOG_ROWS = 60;
         const pollMs = 2000;
+
+        const ALARM_CATALOG = {
+            A001: { title: '통신 / EtherCAT', action: 'TwinCAT·ADS·시뮬 허용 확인' },
+            A002: { title: '압력', action: '누설·펌프·게이지·레시피 setpoint 점검' },
+            A003: { title: '진동', action: '픽업·고정·외란 원인 확인' },
+            A004: { title: 'Load Lock 접촉', action: 'Load Lock 닫힘·DI5 확인' },
+            A005: { title: '온도', action: '환경·냉난방 점검' },
+            A006: { title: '습도', action: '제습/가습·누설 점검' }
+        };
+
+        function formatPredictedAlarm(pa, pc) {
+            const code = (pa || 'NONE').toString().trim().toUpperCase();
+            if (!code || code === 'NONE') return '예상 알람: 없음 (정상 추세)';
+            const info = ALARM_CATALOG[code];
+            const conf = (pc != null && !Number.isNaN(pc)) ? ' · 신뢰 ' + (pc * 100).toFixed(0) + '% (조언만)' : ' (조언만)';
+            if (!info) return '예상 알람: ' + code + conf;
+            return '예상 알람: ' + code + ' · ' + info.title + conf + ' · ▶ ' + info.action;
+        }
+
+        function aiEngineLabel(status, latest) {
+            if (!status) return { text: 'OFF', color: '#6b7280' };
+            if (status.ready && (status.engine || '').toLowerCase() === 'sklearn') return { text: 'ML', color: '#16a34a' };
+            if (latest && latest.success && latest.stub === false) return { text: 'ML', color: '#16a34a' };
+            if (latest && latest.success && latest.stub) return { text: '규칙', color: '#ca8a04' };
+            if ((status.engine || '').toLowerCase() === 'sklearn') return { text: 'ML', color: '#16a34a' };
+            return { text: '규칙', color: '#ca8a04' };
+        }
 
         const history = { t: [], pressure: [], vib: [], temp: [], humi: [] };
         const logRows = [];
@@ -1112,42 +1141,59 @@
         }
 
         function refreshAiTab() {
+            let statusPayload = null;
             fetch('/api/etch/ai/status')
                 .then(r => r.json())
                 .then(x => {
+                    statusPayload = x;
                     document.getElementById('aiStatus').textContent = JSON.stringify(x, null, 2);
-                    const eng = (x.engine || '').toLowerCase();
-                    document.getElementById('aiModelReady').textContent =
-                        x.ready ? (eng === 'sklearn' ? 'ML' : '준비') : '스텁';
+                    return fetch('/api/etch/ai/latest');
                 })
-                .catch(() => {
-                    document.getElementById('aiStatus').textContent = '상태 조회 실패';
-                    document.getElementById('aiModelReady').textContent = '-';
-                });
-
-            fetch('/api/etch/ai/latest')
                 .then(r => r.json())
                 .then(x => {
+                    const eng = aiEngineLabel(statusPayload, x);
+                    const chip = document.getElementById('aiModelReady');
+                    chip.textContent = eng.text;
+                    chip.style.color = eng.color;
+
                     if (!x.success) {
-                        document.getElementById('aiScoreNum').textContent = '-';
+                        document.getElementById('aiScoreNum').textContent = '—';
+                        document.getElementById('aiScoreNum').style.color = '#6b7280';
+                        document.getElementById('aiPredicted').textContent = '예상 알람: —';
                         document.getElementById('aiSuggested').textContent =
                             x.message || 'WPF HMI를 실행하고 sensor-data를 전송하세요.';
-                        document.getElementById('aiUpdatedAt').textContent = '-';
+                        document.getElementById('aiTopSignals').innerHTML = '';
+                        document.getElementById('aiUpdatedAt').textContent = '—';
                         return;
                     }
                     const sc = x.anomaly_score != null ? Number(x.anomaly_score) : NaN;
-                    document.getElementById('aiScoreNum').textContent = Number.isNaN(sc) ? '-' : sc.toFixed(2);
-                    document.getElementById('aiScoreNum').style.color = sc >= 0.75 ? '#dc2626' : sc >= 0.45 ? '#ca8a04' : '#16a34a';
-                    const pa = (x.predicted_alarm || 'NONE').toString().toUpperCase();
+                    const stub = x.stub === true;
+                    const scoreEl = document.getElementById('aiScoreNum');
+                    if (Number.isNaN(sc)) {
+                        scoreEl.textContent = '—';
+                    } else {
+                        scoreEl.textContent = sc.toFixed(2) + (stub ? ' (규칙)' : ' (ML)');
+                    }
+                    scoreEl.style.color = sc >= 0.75 ? '#dc2626' : sc >= 0.45 ? '#ca8a04' : '#16a34a';
+                    const pa = x.predicted_alarm || 'NONE';
                     const pc = x.prediction_confidence != null ? Number(x.prediction_confidence) : NaN;
-                    document.getElementById('aiPredicted').textContent = pa === 'NONE'
-                        ? '예상 알람: 없음'
-                        : '예상 알람: ' + pa + (Number.isNaN(pc) ? '' : ' · 신뢰 ' + (pc * 100).toFixed(0) + '%');
-                    document.getElementById('aiSuggested').textContent = x.suggested_action || x.note || '-';
-                    document.getElementById('aiUpdatedAt').textContent = x.updatedAt || '-';
+                    document.getElementById('aiPredicted').textContent = formatPredictedAlarm(pa, pc);
+                    document.getElementById('aiSuggested').textContent = x.suggested_action || x.note || '—';
+                    document.getElementById('aiUpdatedAt').textContent = x.updatedAt || '—';
+                    const sigBox = document.getElementById('aiTopSignals');
+                    const signals = Array.isArray(x.topSignals) ? x.topSignals : [];
+                    if (!signals.length) {
+                        sigBox.innerHTML = '<span style="color:#94a3b8">ML 근거(topSignals) 없음</span>';
+                    } else {
+                        sigBox.innerHTML = signals.slice(0, 5).map(s =>
+                            '<div style="margin-bottom:4px"><strong>[ML]</strong> ' + s + '</div>'
+                        ).join('');
+                    }
                 })
                 .catch(() => {
-                    document.getElementById('aiSuggested').textContent = 'AI latest 조회 실패';
+                    document.getElementById('aiStatus').textContent = '상태 조회 실패';
+                    document.getElementById('aiModelReady').textContent = 'OFF';
+                    document.getElementById('aiSuggested').textContent = 'AI 조회 실패';
                 });
         }
 
