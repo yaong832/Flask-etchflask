@@ -579,6 +579,50 @@ class DataManager:
     def _row_sensors_live(self, row_data: Dict[str, Any]) -> bool:
         return bool(row_data.get('sensors_live')) and bool(row_data.get('connected'))
 
+    def _snapshot_from_demo(self, demo: Dict[str, Any]) -> Dict[str, Any]:
+        """데모 버퍼 → /api/sensors 스냅샷 (WPF 시뮬·웹 KPI)."""
+        ts = demo.get('timestamp', datetime.now().isoformat())
+        sensors: List[Dict[str, Any]] = []
+        if demo.get('temperature') is not None:
+            t = float(demo['temperature'])
+            sensors.append({
+                'id': 2, 'name': '온도', 'value': f'{t:.1f}℃',
+                'rawValue': t, 'percentage': int(t), 'status': '정상',
+            })
+        if demo.get('humidity') is not None:
+            h = float(demo['humidity'])
+            sensors.append({
+                'id': 1, 'name': '습도', 'value': f'{h:.1f}%',
+                'rawValue': h, 'percentage': int(h), 'status': '정상',
+            })
+        if demo.get('pressure_mtorr') is not None:
+            p = float(demo['pressure_mtorr'])
+            sensors.append({
+                'id': 3, 'name': '압력', 'value': f'{p:.1f} mTorr',
+                'rawValue': p, 'percentage': None, 'status': '정상',
+            })
+        if demo.get('vibration_g') is not None:
+            v = float(demo['vibration_g'])
+            sensors.append({
+                'id': 4, 'name': '진동', 'value': f'{v:.2f} g',
+                'rawValue': v, 'percentage': int(v), 'status': '정상',
+            })
+        return {
+            'currentFarm': demo.get('equipmentId', 1),
+            'powerOn': True,
+            'connected': False,
+            'sensorsLive': False,
+            'dataSource': 'demo',
+            'benchMode': True,
+            'lastUpdate': ts,
+            'sensors': sensors,
+            'equipmentState': demo.get('equipmentState'),
+            'alarmCode': demo.get('alarmCode'),
+            'accessSafe': demo.get('accessSafe'),
+            'interlockOk': demo.get('interlockOk'),
+            'username': demo.get('username'),
+        }
+
     def _build_sensor_list_from_row(self, row_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """EtherCAT 실측이 있을 때만 센서 배열 반환 (미연결·시뮬 시 빈 목록)."""
         if not self._row_sensors_live(row_data):
@@ -637,11 +681,14 @@ class DataManager:
         if not self.use_db:
             # 메모리 모드: 최신 데이터 반환
             if not self.sensor_data_list:
+                if self._last_demo_status:
+                    return self._snapshot_from_demo(self._last_demo_status)
                 return {
                     "currentFarm": farm_id or 1,
                     "powerOn": False,
                     "connected": False,
                     "sensorsLive": False,
+                    "dataSource": "offline",
                     "lastUpdate": datetime.now().isoformat(),
                     "sensors": []
                 }
@@ -664,12 +711,21 @@ class DataManager:
                     }
             else:
                 row_data = None
+                latest_live_ts = ''
                 for candidate in reversed(self.sensor_data_list):
                     ds = candidate.get('data_source', 'live')
-                    if ds == 'live' or (ds != 'demo' and self._row_sensors_live(candidate)):
+                    if ds == 'live' or self._row_sensors_live(candidate):
                         row_data = candidate
+                        latest_live_ts = candidate.get('timestamp', '')
                         break
+
+                demo_ts = (self._last_demo_status or {}).get('timestamp', '')
+                if self._last_demo_status and demo_ts >= latest_live_ts:
+                    return self._snapshot_from_demo(self._last_demo_status)
+
                 if row_data is None:
+                    if self._last_demo_status:
+                        return self._snapshot_from_demo(self._last_demo_status)
                     return {
                         "currentFarm": farm_id or 1,
                         "powerOn": False,
@@ -679,12 +735,13 @@ class DataManager:
                         "lastUpdate": datetime.now().isoformat(),
                         "sensors": []
                     }
-            
+
             result = {
                 "currentFarm": row_data['farm_id'],
                 "powerOn": bool(row_data['power_on']),
                 "connected": bool(row_data['connected']),
                 "sensorsLive": self._row_sensors_live(row_data),
+                "dataSource": row_data.get('data_source', 'live'),
                 "lastUpdate": row_data['timestamp'],
                 "sensors": self._build_sensor_list_from_row(row_data),
             }
