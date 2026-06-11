@@ -34,6 +34,7 @@ CORS(app)
 use_database = os.environ.get('ETCH_USE_DB', '').strip().lower() in ('1', 'true', 'yes')
 _ETCH_SQLITE = os.path.join(_APP_DIR, 'data', 'etch_monitoring.db')
 data_manager = DataManager(use_db=use_database, etch_sqlite_path=_ETCH_SQLITE)
+data_manager.hydrate_from_persisted()
 
 
 def serve_dashboard():

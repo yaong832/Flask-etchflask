@@ -502,6 +502,87 @@ class DataManager:
             return None
         return self._last_ai_diagnosis
 
+    def _module_counts_from_list(self, modules: Optional[List[Dict[str, Any]]]) -> tuple[int, int, int, int]:
+        mod_run = mod_alarm = mod_proc = mod_chamber = 0
+        if not isinstance(modules, list):
+            return mod_run, mod_alarm, mod_proc, mod_chamber
+        for m in modules:
+            if not isinstance(m, dict):
+                continue
+            st = str(m.get('state') or '').upper()
+            mid = str(m.get('id') or '').upper()
+            if st == 'RUNNING':
+                mod_run += 1
+            if st == 'ALARM':
+                mod_alarm += 1
+            if st == 'PROCESSING':
+                mod_proc += 1
+                if mid in ('PM1', 'PM2', 'PM3', 'PM4'):
+                    mod_chamber += 1
+        return mod_run, mod_alarm, mod_proc, mod_chamber
+
+    def _build_ai_input_from_telemetry(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        modules = row.get('modules') or []
+        mod_run, mod_alarm, mod_proc, mod_chamber = self._module_counts_from_list(modules)
+        return {
+            'equipmentState': row.get('equipmentState'),
+            'alarmCode': row.get('alarmCode'),
+            'interlockOk': row.get('interlockOk'),
+            'accessSafe': row.get('accessSafe'),
+            'temperature': row.get('temperature'),
+            'humidity': row.get('humidity'),
+            'pressure': row.get('pressure_mtorr'),
+            'vibration': row.get('vibration_g'),
+            'sensorsLive': False,
+            'benchMode': bool(row.get('benchMode')),
+            'modules': modules,
+            'moduleRunningCount': mod_run,
+            'moduleAlarmCount': mod_alarm,
+            'moduleProcessingCount': mod_proc,
+            'chamberProcessingCount': mod_chamber,
+        }
+
+    def _persisted_sensor_snapshot(self) -> Optional[Dict[str, Any]]:
+        """재시작 직후 메모리가 비었을 때 SQLite 최신 스냅샷으로 /api/sensors 폴백."""
+        if not self._etch_store:
+            return None
+        for src in ('demo', 'live'):
+            row = self._etch_store.get_latest_telemetry(src)
+            if not row:
+                continue
+            if src == 'demo':
+                return self._snapshot_from_demo(row)
+        return None
+
+    def hydrate_from_persisted(self) -> None:
+        """재시작 후 SQLite 텔레메트리·모듈·AI 진단을 메모리에 복원."""
+        if self.use_db or not self._etch_store:
+            return
+        for src, modules_attr in (('demo', '_last_modules_demo'), ('live', '_last_modules_live')):
+            row = self._etch_store.get_latest_telemetry(src)
+            if not row:
+                continue
+            if src == 'demo':
+                self._last_demo_status = dict(row)
+                self._demo_stream_active = True
+            modules = row.get('modules')
+            if modules:
+                setattr(self, modules_attr, modules)
+        row = self._last_demo_status or self._etch_store.get_latest_telemetry('live')
+        if not row:
+            return
+        try:
+            from etch_ai import etch_ai_predict as run_predict
+            from etch_config import PRESSURE_INTERLOCK_MIN, PRESSURE_INTERLOCK_MAX
+
+            ai_input = self._build_ai_input_from_telemetry(row)
+            ai_input['pressureMin'] = PRESSURE_INTERLOCK_MIN
+            ai_input['pressureMax'] = PRESSURE_INTERLOCK_MAX
+            ai_input['vibrationMax'] = 0.8
+            self.set_ai_diagnosis(run_predict(ai_input))
+        except Exception:
+            pass
+
     def get_etch_telemetry_history(self, limit: int = 500, source: str = 'live') -> List[Dict[str, Any]]:
         if self._etch_store:
             return self._etch_store.get_telemetry_history(limit, source)
@@ -683,6 +764,9 @@ class DataManager:
             if not self.sensor_data_list:
                 if self._last_demo_status:
                     return self._snapshot_from_demo(self._last_demo_status)
+                persisted = self._persisted_sensor_snapshot()
+                if persisted:
+                    return persisted
                 return {
                     "currentFarm": farm_id or 1,
                     "powerOn": False,

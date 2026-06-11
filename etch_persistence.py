@@ -180,6 +180,40 @@ class EtchSqliteStore:
             for row in rows
         ]
 
+    def get_latest_telemetry(self, source: str) -> Optional[Dict[str, Any]]:
+        """가장 최근 텔레메트리 1건 (재시작 후 메모리 복원·/api/sensors 폴백용)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM etch_telemetry
+                WHERE data_source = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (source,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            'timestamp': row['ts'],
+            'dataSource': row['data_source'],
+            'equipmentId': row['equipment_id'],
+            'equipmentState': row['equipment_state'],
+            'alarmCode': row['alarm_code'],
+            'interlockOk': bool(row['interlock_ok']) if row['interlock_ok'] is not None else None,
+            'maintenanceMode': bool(row['maintenance_mode']),
+            'benchMode': bool(row['bench_mode']),
+            'temperature': row['temperature'],
+            'humidity': row['humidity'],
+            'pressure_mtorr': row['pressure_mtorr'],
+            'vibration_g': row['vibration_g'],
+            'accessSafe': bool(row['access_safe']) if row['access_safe'] is not None else None,
+            'username': row['username'],
+            'modules': json.loads(row['modules_json']) if row['modules_json'] else None,
+            'connected': False,
+            'sensorsLive': False,
+        }
+
     def get_latest_modules(self, source: str) -> tuple[List[Dict[str, Any]], Optional[str]]:
         """가장 최근 modules_json 스냅샷."""
         with self._connect() as conn:

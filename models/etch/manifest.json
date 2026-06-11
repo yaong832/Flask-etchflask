@@ -1,7 +1,8 @@
 {
   "version": "1",
-  "trained_at": "2026-06-04T06:34:23.489966+00:00",
-  "dataset": "tools\\ai\\output\\training_dataset.csv",
+  "trained_at": "2026-06-11T03:03:04.569958+00:00",
+  "source": "sim_jsonl",
+  "dataset": "D:\\WPFProject\\etch_ui\\tools\\ai\\output\\training_dataset.csv",
   "rows": 3000,
   "feature_names": [
     "temperature",
