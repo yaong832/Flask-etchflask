@@ -13,6 +13,7 @@ from etch_config import (
     PRESSURE_DECIMALS,
     FLASK_BIND_HOST,
     FLASK_PORT,
+    FLASK_DEBUG,
 )
 
 # bat/IDE 어디서 실행하든 templates 를 찾도록 앱 루트 고정 (__main__ 일 때 cwd에 따라 404 나는 문제 방지)
@@ -107,36 +108,6 @@ def get_sensors():
         return jsonify(sensor_data)
     except Exception as e:
         app.logger.error(f"센서 데이터 조회 오류: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/save-logs', methods=['POST'])
-def save_logs():
-    try:
-        data = request.get_json()
-        file_path = data.get('filePath', '') if isinstance(data, dict) else ''
-        if not file_path:
-            file_path = os.path.join(_APP_DIR, 'logs', f'EtchHMI_Logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt')
-        logs = data.get('logs', []) if isinstance(data, dict) else []
-        success = data_manager.save_logs_to_file(file_path, logs)
-        if success:
-            return jsonify({"success": True, "message": "로그 저장 완료"})
-        return jsonify({"success": False, "message": "로그 저장 실패"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/load-logs-file', methods=['POST'])
-def load_logs_file():
-    try:
-        content = request.get_data(as_text=True)
-        if '\n' in content or len(content) > 260:
-            logs = data_manager.parse_logs_from_content(content)
-        else:
-            file_path = content.strip().strip('"\'')
-            logs = data_manager.load_logs_from_file(file_path)
-        return jsonify(logs)
-    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
@@ -383,4 +354,6 @@ if __name__ == '__main__':
     print(f"바인딩: {FLASK_BIND_HOST}:{FLASK_PORT}")
     print("=" * 50 + "\n")
 
-    app.run(host=FLASK_BIND_HOST, port=FLASK_PORT, debug=True, use_reloader=False)
+    # 디버그 모드는 Werkzeug 디버거(브라우저에서 코드 실행 가능)를 켜므로 기본은 끔.
+    # 개발 중에만 ETCH_FLASK_DEBUG=1 로 켜세요. 서버가 0.0.0.0(같은 네트워크 전체)에 열려 있습니다.
+    app.run(host=FLASK_BIND_HOST, port=FLASK_PORT, debug=FLASK_DEBUG, use_reloader=False)
