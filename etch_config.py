@@ -11,6 +11,8 @@ PRESSURE_DECIMALS = 1
 # Flask는 현장 PC에서 0.0.0.0 으로 띄우고, 모니터링 PC는 http://<현장PC_IP>:포트 로만 접속
 FLASK_BIND_HOST = os.environ.get('ETCH_FLASK_HOST', '0.0.0.0')
 FLASK_PORT = int(os.environ.get('ETCH_FLASK_PORT', '5000'))
+# 1/true/yes 일 때만 디버그 모드 (기본 끔)
+FLASK_DEBUG = os.environ.get('ETCH_FLASK_DEBUG', '').strip().lower() in ('1', 'true', 'yes')
 
 
 def monitoring_api_meta() -> dict:
